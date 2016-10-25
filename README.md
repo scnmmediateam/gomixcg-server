@@ -1,1 +1,1 @@
-"# gomix" 
+GOmix server and client for video mixing
