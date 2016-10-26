@@ -1,3 +1,3 @@
 GOmix server and client for video mixing
 
-Več po oglasih
+Client can be found at https://github.com/sestg/gomixcg-client
