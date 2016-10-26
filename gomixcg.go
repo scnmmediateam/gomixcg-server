@@ -27,11 +27,11 @@ import (
 var comPort = "4"
 
 //Small
-var inputScoreboardS = "3"
+var inputScoreboardSmall = "3"
 var overlayScoreboardS = "2"
 
 //Large
-var inputScoreboardL = "2"
+var inputScoreboardLarge = "2"
 var overlayScoreboardL = "1"
 
 var isRunning = true
@@ -41,6 +41,14 @@ var httpclient = http.Client{
 }
 
 //var casparIP = "127.0.0.1"
+
+
+//CONFIGS
+var timeHours = "0"
+var timeMinutes = "0"
+var timeSeconds = "0"
+var timeMilliseconds = "0"
+var timePeriod = "0"
 
 //Vmix config
 var vmixUsed = false
@@ -79,7 +87,7 @@ func HexParser() {
 				for i := 0; i < len(commands); i++ {
 					command, err := hex.DecodeString(commands[i])
 					if err == nil {
-						ParseCommand(string(command))
+						ParseHexCommand(string(command))
 					}
 				}
 			}
@@ -88,19 +96,17 @@ func HexParser() {
 }
 
 func main() {
-	log.Println("builded")
+	log.Println("built")
 	casparConnection, _ = net.Dial("tcp", casparSocket)
 	casperEnstablished = ( casparConnection != nil)
 
 	vmixSocket = vmixIP + ":" + vmixPort
 	comPort = "COM" + comPort
-	
 
-	go HexParser()
+
+	//go HexParser()
 	go WebServer()
 	CommandLine()
-	//fmt.Scanln()
-	
 
 	/*/ DEBUG HEX
 	hexString := "d3 34 31 54 50 3a 31 30 3a 30 30 2e 20 20 2f 31 43 5f 00 d3 34 31 46 48 53 3a 30 30 42 73 00 d3 34 31 46 47 53 3a 30 30 42 72 00 d3 34 31 53 45 52 3a 48 30 2c 47 30 43 77 00 d3 34 31 41 54 3a 20 20 2f 52 42 48 00"
@@ -113,7 +119,7 @@ func main() {
 		log.Println("command: " + commands[i])
 		command, err := hex.DecodeString(commands[i])
 		if err == nil {
-			ParseCommand(string(command))
+			ParseHexCommand(string(command))
 		}
 	}
 	//*/
@@ -130,57 +136,35 @@ func ByteArrayToAsciiString(c []byte) string {
 	return string(c[:n+1])
 }
 
+//
+
 func WebServer() {
 	socketServer, err := socketio.NewServer(nil)
-	http.Handle("/socket.io/", socketServer)
-	http.Handle("/", http.FileServer(http.Dir("./client")))
+	http.HandleFunc("/socket.io/", func(w http.ResponseWriter, r *http.Request)  {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		socketServer.ServeHTTP(w, r)
+	})
+	http.Handle("/", http.FileServer(http.Dir("./testclient")))
 
-
-	log.Println("test")
 	if err == nil {
-		log.Println("test2")
-
-
 
 		socketServer.On("connection", func(so socketio.Socket) {
-			log.Println("Socket ima povezavo")
-
-			so.On("vgasniGrafike", func(msg string) {
-				log.Println("Grafike nerfed!")
-				SendCommandCaspar("CG 2-3 STOP 1 \r\n")
-			})
-			so.On("prizgiGrafike", func(msg string) {
-				log.Println("Grafike pls!")
-				SendCommandCaspar("CG 2-3 ADD 1 \"uraNogometMalaZgoraj\" 1 \"<templateData>" +
-					"<componentData id=\\\"imeKratkoDomaci\\\"><data id=\\\"text\\\" value=\\\"" + nameHomeShort + "\\\"/></componentData>" +
-					"<componentData id=\\\"imeKratkoGosti\\\"><data id=\\\"text\\\" value=\\\"" + nameGuestShort + "\\\"/></componentData>" +
-					"</templateData>\"\r\n")
-			})
-			so.On("vnosImeDomaciKratko", func(imeKratkoDomaciws string) {
-				nameHomeShort=imeKratkoDomaciws
-				log.Println("Vnasam: " + imeKratkoDomaciws)
-				SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
-					"<componentData id=\\\"imeKratkoDomaci\\\"><data id=\\\"text\\\" value=\\\"" + nameHomeShort + "\\\"/></componentData>" +
-					"</templateData>\"\r\n")
-			})
-			so.On("vnosImeGostiKratko", func(imeKratkoGostiws string) {
-				nameGuestShort=imeKratkoGostiws
-				log.Println("Vnasam: " + nameGuestShort)
-
-				SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
-					"<componentData id=\\\"imeKratkoGosti\\\"><data id=\\\"text\\\" value=\\\"" + nameGuestShort + "\\\"/></componentData>" +
-					"</templateData>\"\r\n")
+			//var address = so.handshake.address;
+			//log.Println("Socket ima povezavo" + address.address + ":" + address.port)
+			log.Println("Socket connected")
+			so.On("config-change", func (msg string)  {
+				ParseCommand(msg)
+				so.Emit("config-update", "Strežnik je sprejel ukaz.", func (so socketio.Socket, data string) {})
 			})
 			so.On("disconnection", func() {
-				log.Println("Pepe je izgubil povezavo!")
+				log.Println("Socket disconnected!")
 			})
 		})
 		socketServer.On("error", func(so socketio.Socket, err error) {
 			log.Println("error: ", err)
 		})
-
-
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	log.Fatal(http.ListenAndServe(webServerPort, nil))
 	} else {
 		panic(err)
 	}
@@ -217,7 +201,7 @@ func SplitIntoCommands(hexStringPointer *string) []string {
 	return commands
 }
 
-func ParseCommand(command string) {
+func ParseHexCommand(command string) {
 
 	if len(command) > 2 {
 		header := strings.Split(command, ":")[0]
@@ -227,43 +211,7 @@ func ParseCommand(command string) {
 			sec := string(command[6:8])
 			msec := string(command[9:11])
 			period := string(command[12:13])
-			minInt, err := strconv.Atoi(min)
-			if err == nil {
-				if minInt == 0 {
-					if casparUsed {
-						SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
-							"<componentData id=\\\"cas\\\"><data id=\\\"text\\\" value=\\\"" + sec + ":" + msec + "\\\"/></componentData>" +
-							"</templateData>\"\r\n")
-					}
-					if vmixUsed {
-						go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=cas&Value=" + sec + ":" + msec)
-						go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=cas&Value=" + sec + ":" + msec)
-					}
-
-				} else {
-					if casparUsed {
-						SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
-							"<componentData id=\\\"cas\\\"><data id=\\\"text\\\" value=\\\"" + min + ":" + sec + "\\\"/></componentData>" +
-							"</templateData>\"\r\n")
-					}
-					if vmixUsed {
-						go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=cas&Value=" + min + ":" + sec)
-						go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=cas&Value=" + min + ":" + sec)
-					}
-				}
-
-				if period != "s" && period != "S" && period != "o" && period != "O" && period != "P" && period != "p" {
-					if casparUsed {
-						SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
-							"<componentData id=\\\"perioda\\\"><data id=\\\"text\\\" value=\\\"" + period + "\\\"/></componentData>" +
-							"</templateData>\"\r\n")
-					}
-					if vmixUsed {
-						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=cetrtina&Value=" + period)
-						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=cetrtina&Value=" + period)
-					}
-				}
-			}
+			ParseCommand("update -clock" + min + " " + sec + " " + msec + " " + period)
 		} else if header == "R" {
 			home, err := strconv.Atoi(string(command[3:6]))
 			if err == nil {
@@ -275,8 +223,8 @@ func ParseCommand(command string) {
 							"</templateData>\"\r\n")
 					}
 					if vmixUsed {
-						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=rezultat&Value=" + strconv.Itoa(home) + "-" + strconv.Itoa(guests))
-						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=rezultat&Value=" + strconv.Itoa(home) + "-" + strconv.Itoa(guests))
+						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=rezultat&Value=" + strconv.Itoa(home) + "-" + strconv.Itoa(guests))
+						SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=rezultat&Value=" + strconv.Itoa(home) + "-" + strconv.Itoa(guests))
 					}
 				}
 			}
@@ -284,14 +232,14 @@ func ParseCommand(command string) {
 			attackTime, err := strconv.Atoi(string(command[3:5]))
 			if err == nil && attackTime <= 10 {
 				if vmixUsed {
-					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=napad&Value=" + strconv.Itoa(attackTime))
-					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=napad&Value=" + strconv.Itoa(attackTime))
+					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=napad&Value=" + strconv.Itoa(attackTime))
+					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=napad&Value=" + strconv.Itoa(attackTime))
 				}
 
 			} else if string(command[3:5]) == "  " {
 				if vmixUsed {
-					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=napad&Value=")
-					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=napad&Value=")
+					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=napad&Value=")
+					SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=napad&Value=")
 				}
 			}
 		} else if header == "RT" {
@@ -303,8 +251,8 @@ func ParseCommand(command string) {
 
 
 			if vmixUsed {
-				go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardL + "&SelectedName=cas&Value=" + hr + ":" + min)
-				go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardS + "&SelectedName=cas&Value=" + hr + ":" + min)
+				go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=cas&Value=" + hr + ":" + min)
+				go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=cas&Value=" + hr + ":" + min)
 			}
 			if casparUsed {
 				go SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
@@ -319,84 +267,155 @@ func CommandLine() {
 	for isRunning == true {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print(">>> ")
-		command, _ := reader.ReadString('\r')
-		commandSplit := strings.Split( command[0:len(command)-1], " ")
-		switch string(commandSplit[0]) {
-			case "exit":
-				isRunning = false
-				break
-			case "vmix":
-				//Turn vmix on
-				if Contains(commandSplit,"-on"){
-					casparUsed = true;
-				}
+		command, _ := reader.ReadString('\n')
+		ParseCommand(command)
+	}
+}
 
-				//Turn vmix off
-				if Contains(commandSplit,"-off"){
-					casparUsed = false;
-				}
+func ParseCommand(command string){
+	command = strings.Replace(command,"\n","",-1)
+	command = strings.Replace(command,"\r","",-1)
+	commandSplit := strings.Split( command[0:len(command)], " ")
+	switch string(commandSplit[0]) {
+		case "exit":
+			isRunning = false
+			break
+		case "vmix":
+			//Turn vmix on
+			if Contains(commandSplit,"-on"){
+				vmixUsed = true;
+			}
 
-				//IP
-				if Contains(commandSplit,"-ip") && IndexOf(commandSplit,"-ip")+1 < len(commandSplit) {
-					vmixIP = commandSplit[IndexOf(commandSplit,"-ip")+1]
-					vmixSocket = vmixIP + ":" + vmixPort
-				}
-				//port
-				if Contains(commandSplit,"-port") && IndexOf(commandSplit,"-port")+1 < len(commandSplit) {
-					vmixPort = commandSplit[IndexOf(commandSplit,"-port")+1]
-					vmixSocket = vmixIP + ":" + vmixPort
-				}
+			//Turn vmix off
+			if Contains(commandSplit,"-off"){
+				vmixUsed = false;
+			}
 
-				//print config
-				if Contains(commandSplit,"-config") {
-					log.Println("--- VMIX CONFIG ---")
-					log.Println("Is used: "+strconv.FormatBool(vmixUsed))
-					log.Println("IP: "+vmixIP)
-					log.Println("Port: "+vmixPort)
-					log.Println("Socket: "+vmixSocket)
-				}
-				break
-			case "caspar":
-				//Turn caspar on
-				if Contains(commandSplit,"-on"){
-					casparUsed = true;
-				}
+			//IP
+			if Contains(commandSplit,"-ip") && IndexOf(commandSplit,"-ip")+1 < len(commandSplit) {
+				vmixIP = commandSplit[IndexOf(commandSplit,"-ip")+1]
+				vmixSocket = vmixIP + ":" + vmixPort
+			}
+			//port
+			if Contains(commandSplit,"-port") && IndexOf(commandSplit,"-port")+1 < len(commandSplit) {
+				vmixPort = commandSplit[IndexOf(commandSplit,"-port")+1]
+				vmixSocket = vmixIP + ":" + vmixPort
+			}
 
-				//Turn caspar off
-				if Contains(commandSplit,"-off"){
-					casparUsed = false;
-				}
-				//IP
-				if Contains(commandSplit,"-ip") && IndexOf(commandSplit,"-ip")+1 < len(commandSplit) {
-					casparIP = commandSplit[IndexOf(commandSplit,"-ip")+1]
-					casparSocket = casparIP + ":" + casparPort
-				}
-				//port
-				if Contains(commandSplit,"-port") && IndexOf(commandSplit,"-port")+1 < len(commandSplit) {
-					casparPort = commandSplit[IndexOf(commandSplit,"-port")+1]
-					casparSocket = casparIP + ":" + casparPort
-				}
+			//print config
+			if Contains(commandSplit,"-config") {
+				log.Println("--- VMIX CONFIG ---")
+				log.Println("Is used: "+strconv.FormatBool(vmixUsed))
+				log.Println("IP: "+vmixIP)
+				log.Println("Port: "+vmixPort)
+				log.Println("Socket: "+vmixSocket)
+			}
+			break
+		case "caspar":
+			//Turn caspar on
+			if Contains(commandSplit,"-on"){
+				casparUsed = true;
+			}
 
-				//Connect to casper
-				if Contains(commandSplit,"-connect") {
-					casparConnection, _ = net.Dial("tcp", casparSocket)
-					casperEnstablished = ( casparConnection != nil)
-					if casparConnection != nil {
-						log.Println("SUCCESS - Connection to caspar succesfully enstablished!")
+			//Turn caspar off
+			if Contains(commandSplit,"-off"){
+				casparUsed = false;
+			}
+			//IP
+			if Contains(commandSplit,"-ip") && IndexOf(commandSplit,"-ip")+1 < len(commandSplit) {
+				casparIP = commandSplit[IndexOf(commandSplit,"-ip")+1]
+				casparSocket = casparIP + ":" + casparPort
+			}
+			//port
+			if Contains(commandSplit,"-port") && IndexOf(commandSplit,"-port")+1 < len(commandSplit) {
+				casparPort = commandSplit[IndexOf(commandSplit,"-port")+1]
+				casparSocket = casparIP + ":" + casparPort
+			}
+
+			//Connect to casper
+			if Contains(commandSplit,"-connect") {
+				casparConnection, _ = net.Dial("tcp", casparSocket)
+				casperEnstablished = ( casparConnection != nil)
+				if casparConnection != nil {
+					log.Println("SUCCESS - Connection to caspar succesfully enstablished!")
+				} else {
+					log.Println("ERROR - Valid casper connection couldn't be enstablished!")
+				}
+			}
+			//print config
+			if Contains(commandSplit,"-config") {
+				log.Println("--- CASPAR CONFIG ---")
+				log.Println("Is used: "+strconv.FormatBool(casparUsed))
+				log.Println("IP: "+casparIP)
+				log.Println("Port: "+casparPort)
+				log.Println("Socket: "+casparSocket)
+			}
+			break
+		case "graphics":
+			if Contains(commandSplit,"-init") && IndexOf(commandSplit,"-init")+2 < len(commandSplit) {
+				nameHomeShort = commandSplit[IndexOf(commandSplit,"-init")+1]
+				nameGuestShort = commandSplit[IndexOf(commandSplit,"-init")+2]
+				SendCommandCaspar("CG 2-3 ADD 1 \"uraNogometMalaZgoraj\" 1 \"<templateData>" +
+					"<componentData id=\\\"imeKratkoDomaci\\\"><data id=\\\"text\\\" value=\\\"" + nameHomeShort + "\\\"/></componentData>" +
+					"<componentData id=\\\"imeKratkoGosti\\\"><data id=\\\"text\\\" value=\\\"" + nameGuestShort + "\\\"/></componentData>" +
+					"</templateData>\"\r\n")
+			}
+
+			break
+		case "update":
+			//clock
+			if Contains(commandSplit,"-clock") && IndexOf(commandSplit,"-clock")+4 < len(commandSplit) {
+				timeMinutes = commandSplit[IndexOf(commandSplit,"-clock")+1]
+				timeSeconds = commandSplit[IndexOf(commandSplit,"-clock")+2]
+				timeMilliseconds = commandSplit[IndexOf(commandSplit,"-clock")+3]
+				timePeriod = commandSplit[IndexOf(commandSplit,"-clock")+4]
+
+				minInt, err := strconv.Atoi(timeMinutes)
+				if err == nil{
+					if minInt == 0 {
+						if timeMilliseconds == "  " {
+							if vmixUsed {
+								go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=cas&Value=" + timeMinutes + "." + timeSeconds)
+								go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=cas&Value=" + timeMinutes + "." + timeSeconds)
+							}
+							if casparUsed {
+								SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
+									"<componentData id=\\\"cas\\\"><data id=\\\"text\\\" value=\\\"" + timeMinutes + "." + timeSeconds + "\\\"/></componentData>" + "</templateData>\"\r\n")
+							}
+						} else {
+							if vmixUsed {
+								go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=cas&Value=" + timeSeconds + ":" + timeMilliseconds)
+								go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=cas&Value=" + timeSeconds + ":" + timeMilliseconds)
+							}
+							if casparUsed {
+								SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
+									"<componentData id=\\\"cas\\\"><data id=\\\"text\\\" value=\\\"" + timeSeconds + ":" + timeMilliseconds + "\\\"/></componentData>" + "</templateData>\"\r\n")
+							}
+						}
 					} else {
-						log.Println("ERROR - Valid casper connection couldn't be enstablished!")
+						if vmixUsed {
+							go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=cas&Value=" + timeMinutes + ":" + timeSeconds)
+							go SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=cas&Value=" + timeMinutes + ":" + timeSeconds)
+						}
+						if casparUsed {
+							SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
+								"<componentData id=\\\"cas\\\"><data id=\\\"text\\\" value=\\\"" + timeMinutes + ":" + timeSeconds + "\\\"/></componentData>" + "</templateData>\"\r\n")
+						}
+					}
+					if timePeriod != "s" && timePeriod != "S" && timePeriod != "o" && timePeriod != "O" && timePeriod != "P" && timePeriod != "p" {
+						if vmixUsed {
+							SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardLarge + "&SelectedName=cetrtina&Value=" + timePeriod)
+							SendCommandVMIX("http://" + vmixSocket + "/api/?Function=SetText&Input=" + inputScoreboardSmall + "&SelectedName=cetrtina&Value=" + timePeriod)
+						}
+						if casparUsed {
+							SendCommandCaspar("CG 2-3 UPDATE 1 \"<templateData>" +
+								"<componentData id=\\\"perioda\\\"><data id=\\\"text\\\" value=\\\"" + timePeriod + "\\\"/></componentData>" +
+								"</templateData>\"\r\n")
+						}
 					}
 				}
-				//print config
-				if Contains(commandSplit,"-config") {
-					log.Println("--- CASPAR CONFIG ---")
-					log.Println("Is used: "+strconv.FormatBool(casparUsed))
-					log.Println("IP: "+casparIP)
-					log.Println("Port: "+casparPort)
-					log.Println("Socket: "+casparSocket)
-				}
-				break
-		}
+			}
+			break
 	}
 }
 
