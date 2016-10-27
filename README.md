@@ -20,7 +20,11 @@ Usage: command -args data
 >			-off                //disable sending commands to the mixer  
 >			-ip 127.0.0.1       //set ip of the mixer  
 >			-port 8081          //set port of the mixer  
->			-config              //lists config data  
+>			-config              //lists config data
+
+>hdmi
+>			-on                 //enable sending commands to the output  
+>			-off                //disable sending commands to the output  
     
 EG: vmix -ip 127.0.0.1   
     vmix -port 8081  
