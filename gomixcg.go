@@ -22,6 +22,7 @@ import (
 	"os"
 	"github.com/googollee/go-socket.io"
 	"github.com/tarm/serial"
+	"github.com/ajstarks/openvg"
 )
 
 var comPort = "4"
@@ -63,6 +64,10 @@ var casparIP = "88.200.86.101"
 var casparPort = "5250"
 var casparSocket = casparIP + ":" + casparPort
 var casparConnection, _ = net.Dial("tcp", casparSocket)
+
+var hdmiUsed = true
+var hdmiBgColor = "0,255,0"
+var hdmiTextColor = "255,255,255"
 
 var webServerPort = ":8081"
 
@@ -268,10 +273,15 @@ func CommandLine() {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print(">>> ")
 		command, _ := reader.ReadString('\n')
-		ParseCommand(command)
+		if(!ParseCommand(command)) {
+			// Zaenkrat samo boolean drugace bi lahko imeli da returna index napacnega argumenta ali pa -1 ce je OK.
+			log.Println("Invalid argument recieved.")
+		}
 	}
 }
 
+
+// Vsaka komanda mora returnat boolean vrednost da je OK sparsana komanda.
 func ParseCommand(command string){
 	command = strings.Replace(command,"\n","",-1)
 	command = strings.Replace(command,"\r","",-1)
@@ -362,6 +372,20 @@ func ParseCommand(command string){
 			}
 
 			break
+		case "hdmi":
+			if Contains(commandSplit, "-on") {
+				hdmiUsed = true
+			}
+			if Contains(commandSplit, "-off"){
+				hdmiUsed = false
+			}
+			if Contains(commandSplit, "-bgcolor") && IndexOf(commandSplit,"-bgcolor")+1 < len(commandSplit) {
+				hdmiBgColor = commandSplit[IndexOf(commandSplit,"-bgcolor")+1]
+			}
+			if Contains(commandSplit, "-fontcolor") && IndexOf(commandSplit,"-fontcolor")+1 < len(commandSplit) {
+				hdmiTextColor = commandSplit[IndexOf(commandSplit,"-fontcolor")+1]
+			}
+			break
 		case "update":
 			//clock
 			if Contains(commandSplit,"-clock") && IndexOf(commandSplit,"-clock")+4 < len(commandSplit) {
@@ -417,6 +441,7 @@ func ParseCommand(command string){
 			}
 			break
 	}
+	return true
 }
 
 func Contains(s []string, e string) bool {
@@ -437,6 +462,18 @@ func IndexOf(s []string, e string) int {
 	return -1
 }
 
+func HDMIOutput(){
+	width, height := openvg.Init()
+	openvg.Start(width, height)
+	ovenvg.BackgroundRGB(0, 235, 0, 1)
+	for isRunning == true && hdmiUsed == true {
+
+	}
+}
+
+func SendCommandHDMI(command string) {
+
+}
 func SendCommandVMIX(command string) {
 	httpclient.Get(command)
 }
